@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const API = "http://localhost:5000";
 
@@ -11,12 +13,13 @@ export default function InputForm() {
   const [ip, setIp] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+  const [progress, setProgress] = useState(0); // ✅ progress state
 
-  // 🧭 Get client IP
+  // 🧭 Get full public IP address using external API
   useEffect(() => {
     axios
-      .get(`${API}/api/ip`)
-      .then((res) => setIp(res.data.ip || ""))
+      .get("https://api.ipify.org?format=json")
+      .then((res) => setIp(res.data.ip))
       .catch(() => setIp("Unavailable"));
   }, []);
 
@@ -46,14 +49,30 @@ export default function InputForm() {
     return () => clearTimeout(timer);
   }, [key]);
 
+  // ⏳ Progress effect
+  useEffect(() => {
+    if (!loading) return;
+    setProgress(0);
+    let value = 0;
+    const interval = setInterval(() => {
+      value += 5;
+      if (value >= 100) {
+        value = 100;
+        clearInterval(interval);
+      }
+      setProgress(value);
+    }, 80);
+    return () => clearInterval(interval);
+  }, [loading]);
+
   // 📨 Submit form
   const submitTicket = async (e) => {
     e.preventDefault();
-    if (!emp) return setMsg("Please enter a valid employee.");
+    if (!emp) return toast.error("⚠️ Please enter a valid employee.");
     if (!form.issue_text.trim())
-      return setMsg("Please describe the issue before submitting.");
+      return toast.warning("✏️ Please describe the issue before submitting.");
     if (!form.reporting_to.trim())
-      return setMsg("Please select who you're reporting to.");
+      return toast.warning("👤 Please select who you're reporting to.");
 
     try {
       setLoading(true);
@@ -64,25 +83,34 @@ export default function InputForm() {
         department: emp.department,
         reporting_to: form.reporting_to,
         issue_text: form.issue_text,
+        ip_address: ip, // ✅ include IP in payload if needed
       };
       await axios.post(`${API}/api/tickets`, payload);
-      setMsg("✅ Ticket submitted successfully and email sent!");
-      setForm({ issue_text: "", reporting_to: "" });
-      setKey("");
-      setEmp(null);
+
+      // Smooth finish
+      setTimeout(() => {
+        toast.success("✅ Ticket Submitted Successfully!", {
+          position: "top-center",
+          autoClose: 2500,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          theme: "colored",
+        });
+
+        setForm({ issue_text: "", reporting_to: "" });
+        setKey("");
+        setEmp(null);
+        setLoading(false);
+      }, 1200);
     } catch (e) {
-      setMsg(e?.response?.data?.message || "Submit failed");
-    } finally {
+      toast.error(e?.response?.data?.message || "❌ Submit failed. Try again.");
       setLoading(false);
     }
   };
 
-  const reportingList = [
-    "Murugan R",
-    "Venkatesan K",
-    "Nagarajan M",
-    "Rajkumar",
-  ];
+  const reportingList = ["Murugan R", "Venkatesan K", "Nagarajan M", "Rajkumar"];
 
   return (
     <div
@@ -100,7 +128,8 @@ export default function InputForm() {
           Rapid Ticketing System
         </h3>
         <p className="text-center text-muted mb-4">
-          System IP: <b>{ip || "-"}</b>
+          System IP:{" "}
+          <b className="text-dark">{ip ? ip : "Fetching..."}</b>
         </p>
 
         {/* 🔍 Employee Search */}
@@ -133,7 +162,11 @@ export default function InputForm() {
               </div>
               <div className="col-md-6">
                 <label className="form-label">Department</label>
-                <input className="form-control" value={emp.department} readOnly />
+                <input
+                  className="form-control"
+                  value={emp.department}
+                  readOnly
+                />
               </div>
             </div>
           )}
@@ -174,17 +207,33 @@ export default function InputForm() {
             </select>
           </div>
 
-          <button
-            className="btn btn-success w-100 fw-bold shadow-sm"
-            disabled={loading || !emp}
-          >
-            {loading ? "Submitting..." : "Send Mail & Save"}
-          </button>
+          {/* ✅ Button + Progress */}
+          <div className="position-relative">
+            <button
+              type="submit"
+              className="btn btn-success w-100 fw-bold shadow-sm"
+              disabled={loading || !emp}
+            >
+              {loading ? `Submitting... ${progress}%` : "Send Mail & Save"}
+            </button>
+
+            {loading && (
+              <div
+                className="progress mt-2"
+                style={{ height: "8px", borderRadius: "6px" }}
+              >
+                <div
+                  className="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                  role="progressbar"
+                  style={{ width: `${progress}%` }}
+                ></div>
+              </div>
+            )}
+          </div>
         </form>
 
-        {msg && (
-          <div className="alert alert-info text-center mt-3 mb-0">{msg}</div>
-        )}
+        {/* ✅ Toast container */}
+        <ToastContainer />
       </div>
     </div>
   );
